@@ -15,10 +15,21 @@ PROFESSOR_ALERT_DISTANCE = 8 * GRID_SIZE  # Distance at which professor speeds u
 EXIT_RANGE_ALLOWANCE = 10  # Adjust this value as needed
 DAMAGE = 1
 num_bluebooks = 10
+player_stamina_flag = 0
+
+# Constants for Stamina
+MAX_STAMINA = MAX_HEALTH = 100
+STAMINA_RECHARGE_RATE = 1  # Stamina points recharged per frame when not boosting
+STAMINA_DEPLETION_RATE = 2  # Stamina points depleted per frame when boosting
+STAMINA_BOOST_SPEED = 3 # Additional Player speed when sprint is activated
+
+# Global variables for Stamina
+player_stamina = MAX_STAMINA
 
 # Colors
 WHITE = (255, 255, 255)
 BLUE = (0, 0, 255)
+LIGHT_BLUE = (135, 206, 235)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 BLACK = (0, 0, 0)
@@ -84,17 +95,30 @@ class Player(GameObject):
         super().__init__(x, y, GREEN)
         self.health = 100
         self.bluebooks_collected = 0
+        self.player_stamina = MAX_STAMINA  # Initialize player's stamina
     
     def draw(self, screen):
         global num_bluebooks
         pygame.draw.circle(screen, self.color, (self.x, self.y), 15)
         
-        # Draw health and bluebook collection
-        font = pygame.font.Font(None, 36)
-        health_text = font.render(f"Health: {self.health}", True, BLACK)
-        bluebook_text = font.render(f"Bluebooks: {self.bluebooks_collected}/{num_bluebooks}", True, BLACK)
+        # Draw health, bluebook collection, and stamina
+        font = pygame.font.Font(None, 28)
+        health_text = font.render(f"Health: {self.health}", True, RED)
+        bluebook_text = font.render(f"Bluebooks: {self.bluebooks_collected}/{num_bluebooks}", True, BLUE)
+        stamina_text = font.render(f"Stamina: {self.player_stamina}/{MAX_STAMINA}", True, LIGHT_BLUE)
+        
         screen.blit(health_text, (10, 10))
+
+        # Draw health bar
+        pygame.draw.rect(screen, RED, pygame.Rect(10, 30, self.health, 10))
+        pygame.draw.rect(screen, BLACK, pygame.Rect(10, 30, MAX_HEALTH, 10), 2)  # Outline for stamina bar
+
         screen.blit(bluebook_text, (10, 50))
+        screen.blit(stamina_text, (10, 70))
+        
+        # Draw stamina bar
+        pygame.draw.rect(screen, LIGHT_BLUE, pygame.Rect(10, 90, self.player_stamina, 10))
+        pygame.draw.rect(screen, BLACK, pygame.Rect(10, 90, MAX_STAMINA, 10), 2)  # Outline for stamina bar
 
 class Exit(GameObject):
     def __init__(self, x, y):
@@ -184,7 +208,7 @@ def initialize_game(difficulty):
 
 buttons = []
 
-def draw_menu(difficulty):
+def draw_menu():
     screen.fill(WHITE)
     font = pygame.font.Font(None, 48)
     title_text = font.render("Bluebook Collector", True, BLACK)
@@ -235,10 +259,29 @@ def draw_game():
     pygame.display.flip()
 
 def update_player_movement():
+    global PLAYER_SPEED
+    global player_stamina_flag
+    
     mouse_x, mouse_y = pygame.mouse.get_pos()
     angle = math.atan2(mouse_y - player.y, mouse_x - player.x)
-    new_x = player.x + PLAYER_SPEED * math.cos(angle)
-    new_y = player.y + PLAYER_SPEED * math.sin(angle)
+    
+    # Check if left mouse button is pressed and there is sufficient stamina
+    if pygame.mouse.get_pressed()[0] and player.player_stamina > 0 and player_stamina_flag == 0:
+        new_speed = PLAYER_SPEED + STAMINA_BOOST_SPEED
+        if player.player_stamina >= STAMINA_DEPLETION_RATE:
+            player.player_stamina -= STAMINA_DEPLETION_RATE
+        else:
+            player.player_stamina = 0
+            player_stamina_flag = 1
+    else:
+        new_speed = PLAYER_SPEED
+        if player.player_stamina < MAX_STAMINA:
+            player.player_stamina += STAMINA_RECHARGE_RATE
+        if player.player_stamina == 100:
+            player_stamina_flag = 0
+
+    new_x = player.x + new_speed * math.cos(angle)
+    new_y = player.y + new_speed * math.sin(angle)
     
     # Check for collision with obstacles
     for obstacle in obstacles:
@@ -353,9 +396,18 @@ def update_professors_movement():
                     dx = professor.x - other_professor.x
                     dy = professor.y - other_professor.y
                     dist = math.hypot(dx, dy)
-                    # Move away from the other professor
-                    professor.x += dx / dist * PROFESSOR_SPEED
-                    professor.y += dy / dist * PROFESSOR_SPEED
+                    # Move away from the other professor, avoiding division by zero
+                    if dist != 0:
+                        professor.x += dx / dist * PROFESSOR_SPEED
+                        professor.y += dy / dist * PROFESSOR_SPEED
+                    else:
+                        # Handle division by zero error by forcibly splitting professors
+                        # Move the current professor
+                        professor.x += dx * PROFESSOR_SPEED
+                        professor.y += dy * PROFESSOR_SPEED
+                        # Move the other professor
+                        other_professor.x -= dx * PROFESSOR_SPEED
+                        other_professor.y -= dy * PROFESSOR_SPEED
 
         # Set initial speed
         speed = PROFESSOR_SPEED
@@ -372,8 +424,13 @@ def update_professors_movement():
             if dist <= speed:
                 professor.x, professor.y = next_x, next_y
             else:
-                professor.x += dx / dist * speed
-                professor.y += dy / dist * speed
+                # Avoid division by zero when dist is zero
+                if dist != 0:
+                    professor.x += dx / dist * speed
+                    professor.y += dy / dist * speed
+                else:
+                    # Handle division by zero error (optional)
+                    pass
         else:
             # No valid path found, do something else (e.g., random movement)
             professor.x += random.uniform(-1, 1) * speed
@@ -381,6 +438,20 @@ def update_professors_movement():
 
 def reset_game_stats():
     global menu, countdown_timer, countdown_font, player, game_frozen, won
+    global obstacles, bluebooks, professors
+    global WIDTH, HEIGHT, GRID_SIZE, PLAYER_SPEED, PROFESSOR_SPEED, PROFESSOR_ALERT_DISTANCE, EXIT_RANGE_ALLOWANCE, DAMAGE, num_bluebooks
+
+    WIDTH, HEIGHT = 800, 600
+    GRID_SIZE = 20  # Size of each grid cell
+    PLAYER_SPEED = 5
+    PROFESSOR_SPEED = 3
+    PROFESSOR_ALERT_DISTANCE = 8 * GRID_SIZE  # Distance at which professor speeds up
+    EXIT_RANGE_ALLOWANCE = 10  # Adjust this value as needed
+    DAMAGE = 1
+    num_bluebooks = 10
+    obstacles = []
+    bluebooks = []
+    professors = []
     menu = True
     countdown_timer = 3
     countdown_font = pygame.font.Font(None, 100)
@@ -397,6 +468,7 @@ countdown_font = pygame.font.Font(None, 100)
 
 def main_menu():
     global difficulty
+    global player
     difficulty = None
     menu = True
     while menu:
@@ -409,8 +481,8 @@ def main_menu():
                     if button.clicked():
                         difficulty = button.action
                         menu = False
-
-        draw_menu(difficulty)
+        
+        draw_menu()
 
 # Main game loop
 main_menu()
@@ -459,7 +531,7 @@ class EndGameScreen:
 
 class VictoryScreen(EndGameScreen):
     def __init__(self):
-        super().__init__("Congratulations! You've collected all the bluebooks and reached the exit.")
+        super().__init__("Congratulations! You made it past Hell Week! :D")
 
 class GameOverScreen(EndGameScreen):
     def __init__(self):
