@@ -18,6 +18,7 @@ LOCK_RANGE = 100 # Lock Range for player to lock professors
 num_bluebooks = 10
 player_stamina_flag = 0
 bluebooks_collected = 0
+prof_characters = ["Adam", "Alex", "Amelia", "Bob", "Ren"]
 
 # Initialize a variable for the skill animation radius and cast_flag for player animation
 draw_skill_animation_flag = 0
@@ -48,6 +49,7 @@ TRANSPARENT_BLACK = (0, 0, 0, 128)
 
 # Define the new size for the character images
 new_size = (32, 32)  # Change this size as needed
+prof_size = (32, 48)  # Change this size as needed
 
 # Load and scale the images
 Character_Tileset_Idle1 = pygame.transform.scale(pygame.image.load('Assets/Player/Idle1.png'), new_size)
@@ -120,15 +122,26 @@ class Bluebook(GameObject):
         pygame.draw.circle(screen, self.color, (self.x, self.y), 10)
 
 class Professor(GameObject):
-    def __init__(self, x, y):
+    def __init__(self, x, y, character):
         super().__init__(x, y, DARK_RED)
         self.locked = False  # Initialize locked state as False
+        self.professor_state = 'Down'
 
-    def move_towards_player(self, player_x, player_y):
-        pass
-    
+        # Load the sprite sheets
+        self.run_down_frames = [pygame.transform.scale(pygame.image.load(f'Assets/Professors/{character}_run_down_16x16.png').subsurface(pygame.Rect(i * 48, 0, 48, 69)), prof_size) for i in range(3)]
+        self.run_left_frames = [pygame.transform.scale(pygame.image.load(f'Assets/Professors/{character}_run_left_16x16.png').subsurface(pygame.Rect(i * 48, 0, 48, 69)), prof_size) for i in range(3)]
+        self.run_right_frames = [pygame.transform.scale(pygame.image.load(f'Assets/Professors/{character}_run_right_16x16.png').subsurface(pygame.Rect(i * 48, 0, 48, 69)), prof_size) for i in range(3)]
+        self.run_up_frames = [pygame.transform.scale(pygame.image.load(f'Assets/Professors/{character}_run_up_16x16.png').subsurface(pygame.Rect(i * 48, 0, 48, 69)), prof_size) for i in range(3)]
+
+        # Initialize the current frame
+        self.current_frame = 0
+
     def draw(self, screen):
-        pygame.draw.circle(screen, self.color, (self.x, self.y), 15)
+        # Call the Professor_Animation function to animate the professor
+        Professor_Animation(screen, self.professor_state, self.current_frame, self)
+
+        # Update the professor's state and frame based on the game logic
+        # This should be done in your main game loop
 
 class Player(GameObject):
     def __init__(self, x, y):
@@ -255,12 +268,19 @@ def initialize_game(difficulty):
         num_professors = 5
         DAMAGE = 3
 
+    # For character namizationcharacters = ["Adam", "Alex", "Amelia", "Bob", "Ren"]
+    num_prof_characters = len(prof_characters)
+
     professors = []
-    for _ in range(num_professors):
+    for i in range(num_professors):
         x, y = random.randint(50, WIDTH - 50), random.randint(50, HEIGHT - 50)
         while any(obstacle.x - 2 < x < obstacle.x + obstacle.width + 2 and obstacle.y - 2 < y < obstacle.y + obstacle.height + 2 for obstacle in obstacles) or not (50 < x < WIDTH - 50 and 50 < y < HEIGHT - 50):
             x, y = random.randint(50, WIDTH - 50), random.randint(50, HEIGHT - 50)
-        professors.append(Professor(x, y))
+        
+        # Assign a character to the professor
+        character = prof_characters[i % num_prof_characters]
+        
+        professors.append(Professor(x, y, character))
 
     # Initialize exit box
     exit_box = Exit(100, HEIGHT - 25)  # Place exit in lower left corner
@@ -339,7 +359,6 @@ def draw_guide():
         pygame.display.flip()
         pygame.time.wait(10)  # Pauses
 
-
 def Player_Animation(screen, player_state, player_frame):
     # Define the tilesets for each player state
     Character_Tilesets = {
@@ -359,6 +378,25 @@ def Player_Animation(screen, player_state, player_frame):
 
     # Draw the current frame of the player's animation
     screen.blit(current_tileset[player_frame], (pos_x, pos_y))
+
+def Professor_Animation(screen, professor_state, professor_frame, professor):
+    # Define the tilesets for each professor state
+    Professor_Tilesets = {
+        "Down": professor.run_down_frames,
+        "Left": professor.run_left_frames,
+        "Right": professor.run_right_frames,
+        "Up": professor.run_up_frames
+    }
+
+    # Get the current tileset for the professor's state
+    current_tileset = Professor_Tilesets[professor_state]
+
+    # Calculate the position to center the image
+    pos_x = professor.x - current_tileset[professor_frame].get_width() // 2
+    pos_y = professor.y - current_tileset[professor_frame].get_height() // 2
+
+    # Draw the current frame of the professor's animation
+    screen.blit(current_tileset[professor_frame], (pos_x, pos_y))
 
 def draw_game():
     global num_bluebooks, draw_skill_animation_flag, skill_animation_radius
@@ -578,12 +616,15 @@ def update_professors_movement():
         PROFESSOR_SPEED = 5
     
     for professor in professors:
+        # new_x = professor.x, new_y = professor.y
         if professor.locked:
             if lock_index == 0:
                 professor.locked = False
             else:
-                professor.x += random.uniform(-1, 1) * speed
-                professor.y += random.uniform(-1, 1) * speed
+                new_x = random.uniform(-1, 1) * speed
+                new_y = random.uniform(-1, 1) * speed
+                professor.x += new_x
+                professor.y += new_y
                 lock_index -= 1
         else:
             # Calculate path to player
@@ -638,6 +679,21 @@ def update_professors_movement():
                 # No valid path found, do something else (e.g., random movement)
                 professor.x += random.uniform(-1, 1) * speed
                 professor.y += random.uniform(-1, 1) * speed
+        
+            # Update professor's state and frame based on the movement direction
+            if next_x > professor.x:
+                professor.professor_state = 'Right'
+            elif next_x < professor.x:
+                professor.professor_state = 'Left'
+            elif next_y > professor.y:
+                professor.professor_state = 'Down'
+            elif next_y < professor.y:
+                professor.professor_state = 'Up'
+            else:
+                professor.professor_state = 'Down'
+
+            # Update professor's frame for animation
+            professor.current_frame = (professor.current_frame + 1) % 3  # Assuming there are 3 frames in each animation
 
 def reset_game_stats():
     global menu, countdown_timer, countdown_font, player, game_frozen, won
