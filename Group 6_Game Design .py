@@ -610,13 +610,12 @@ def calculate_path(prof_x, prof_y, target_x, target_y):
     return []
 
 def update_professors_movement():
-    global lock_index, PROFESSOR_SPEED, num_bluebooks, speed
+    global lock_index, PROFESSOR_SPEED, num_bluebooks
 
     if player.bluebooks_collected == num_bluebooks:
         PROFESSOR_SPEED = 5
     
     for professor in professors:
-        # new_x = professor.x, new_y = professor.y
         if professor.locked:
             if lock_index == 0:
                 professor.locked = False
@@ -628,6 +627,8 @@ def update_professors_movement():
                 lock_index -= 1
         else:
             # Calculate path to player
+            new_x = professor.x
+            new_y = professor.y
             path = calculate_path(professor.x, professor.y, player.x, player.y)
             
             # Check for collision avoidance with other professors
